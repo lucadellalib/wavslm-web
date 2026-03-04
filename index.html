@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WavSLM: Single-Stream Speech Language Modeling via WavLM Distillation</title>
+
+  <link href="https://fonts.googleapis.com/css?family=Montserrat" rel="stylesheet">
+
+  <style>
+    :root{
+      --brown: #8b3a3a;
+      --blue: #1f4e79;
+      --border: #dddddd;
+      --bgHead: #fafafa;
+      --bgLabel: #fcfcfc;
+      --textMuted: #666;
+    }
+
+    body{
+      font-family: 'Montserrat';
+      margin: 0;
+      padding: 24px 24px 60px;
+      line-height: 1.5;
+      color: #111;
+      background: #ffffff;
+    }
+
+    .wrap{
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .hero{
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .hero h1{
+      margin: 0;
+      color: var(--brown);
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    h2{
+      color: var(--brown);
+      text-align: center;
+      margin: 30px 0 12px;
+      font-size: 20px;
+    }
+
+    h4{
+      color: var(--blue);
+      margin: 28px 0 10px;
+      font-size: 16px;
+    }
+
+    p{
+      font-size: 14px;
+      margin: 10px 0;
+    }
+
+    /* -------- Figure -------- */
+
+    .figure{
+      text-align: center;
+      margin: 28px 0 8px;
+    }
+
+    .figure img{
+      max-width: 100%;
+      width: 900px;
+      border-radius: 10px;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    }
+
+    .figure figcaption{
+      margin-top: 12px;
+      font-size: 13px;
+      color: #444;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* -------- Note Box -------- */
+
+    .note{
+      margin: 18px 0 24px;
+      padding: 14px 16px;
+      border: 1px solid #e7e7e7;
+      background: #fbfbfb;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .note-title{
+      font-weight: 700;
+      color: var(--blue);
+      margin-bottom: 6px;
+    }
+
+    .note ul{
+      margin: 8px 0 0 18px;
+      padding: 0;
+    }
+
+    .note li{
+      margin: 6px 0;
+    }
+
+    /* -------- Table -------- */
+
+    .tableScroll{
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table.samples{
+      border-collapse: collapse;
+      width: 100%;
+      table-layout: fixed;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: white;
+    }
+
+    table.samples th,
+    table.samples td{
+      border: 1px solid var(--border);
+      padding: 10px;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    table.samples th{
+      background: var(--bgHead);
+      color: var(--brown);
+      font-weight: 800;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    table.samples td.rowlabel{
+      text-align: left;
+      font-weight: 700;
+      color: var(--brown);
+      background: var(--bgLabel);
+      white-space: nowrap;
+      width: 170px;
+    }
+
+    audio{
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .promptCell{
+      text-align: center !important;
+      background: #fff;
+    }
+
+    .promptWrap{
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .promptPath{
+      color: var(--textMuted);
+      font-size: 12px;
+    }
+
+    .spacer{
+      height: 32px;
+    }
+
+    @media (max-width: 900px){
+      body{ padding: 16px 12px 40px; }
+      .hero h1{ font-size: 22px; }
+      table.samples{ min-width: 980px; }
+    }
+
+    .highlight-text {
+      font-size: 18px;      /* increase size */
+      font-weight: 800;     /* make bold */
+      text-align: center;   /* optional */
+      margin: 10px 0;
+      color: #111;          /* or use var(--brown) if you want emphasis */
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <h1>WavSLM: Single-Stream Speech Language Modeling via WavLM Distillation</h1>
+  </div>
+
+  <h2>Abstract</h2>
+
+  <p>
+    Large language models show that simple autoregressive training can yield scalable and coherent generation, yet extending this paradigm to speech remains challenging due to the entanglement of semantic and acoustic information. Most existing speech language models rely on text supervision, hierarchical token streams, or complex hybrid architectures. In this work, we introduce WavSLM, a speech language model trained by quantizing and distilling self-supervised WavLM representations into a single codebook and optimizing an autoregressive next-chunk prediction objective. WavSLM jointly models semantic and acoustic information within a single token stream, without text supervision or text pretraining, achieving competitive performance while supporting fully streamable inference.
+  </p>
+
+  <!-- ===== FIGURE ===== -->
+  <figure class="figure">
+    <img src="wavslm.jpg" alt="WavSLM">
+    <figcaption>
+       Figure 1: WavSLM architecture. Raw speech is processed by FocalCodec-Stream (blue), which includes the feature extractor and lower WavLM layers, followed by a compressor, quantizer, decompressor, and decoder to produce a low-bitrate, single-stream sequence of discrete tokens. The decompressor converts tokens back into continuous features that are compatible with the upper WavLM layers. These layers are used as a causal speech language modeling backbone, with a lightweight language modeling head on top.
+    </figcaption>
+  </figure>
+
+  <h2>Audio Samples</h2>
+
+  <p class="highlight-text">
+    For each sample, we provide an audio prompt and <b>four</b> continuations generated by each model, all with the same duration as the prompt.
+  </p>
+
+  <!-- ===== NOTE ===== -->
+  <div class="note">
+    <div class="note-title">Please note</div>
+    <ul>
+      <li>Chrome is the preferred browser.</li>
+      <li>Use headphones for best experience.</li>
+      <li><b>Please adjust volume before playing samples.</b></li>
+      <li><mark>Audio files may take time to load</mark> depending on hosting.</li>
+    </ul>
+  </div>
+
+  <!-- ===== SAMPLE A ===== -->
+  <h4>Sample A</h4>
+
+  <div class="tableScroll">
+  <table class="samples">
+    <tr>
+      <th></th>
+      <th>WavSLM-2k</th>
+      <th>WavSLM-4k</th>
+      <th>WavSLM-65k</th>
+      <th>LLaMA-Mimi 1.3B</th>
+      <th>LLaMA-Mimi 8B</th>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Prompt</td>
+      <td colspan="5" class="promptCell">
+          <audio controls preload="none">
+            <source src="audio/sample_2094-142345-0002/wavslm-2k/prompt_16000.wav" type="audio/wav">
+          </audio>
+        </span>
+      </td>
+    </tr>
+
+    <!-- Continuations -->
+    <tr>
+      <td class="rowlabel">Continuation 1</td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-2k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-4k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-65k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-1.3b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-8b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 2</td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-2k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-4k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-65k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-1.3b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-8b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 3</td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-2k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-4k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-65k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-1.3b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-8b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 4</td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-2k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-4k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-65k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-1.3b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-8b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <!--
+    <tr>
+      <td class="rowlabel">Continuation 5</td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-2k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-4k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/wavslm-65k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-1.3b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_2094-142345-0002/llama-mimi-8b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+    -->
+  </table>
+  </div>
+
+  <div class="spacer"></div>
+
+    <!-- ===== SAMPLE B ===== -->
+  <h4>Sample B</h4>
+
+  <div class="tableScroll">
+  <table class="samples">
+    <tr>
+      <th></th>
+      <th>WavSLM-2k</th>
+      <th>WavSLM-4k</th>
+      <th>WavSLM-65k</th>
+      <th>LLaMA-Mimi 1.3B</th>
+      <th>LLaMA-Mimi 8B</th>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Prompt</td>
+      <td colspan="5" class="promptCell">
+          <audio controls preload="none">
+            <source src="audio/sample_8230-279154-0006/wavslm-2k/prompt_16000.wav" type="audio/wav">
+          </audio>
+        </span>
+      </td>
+    </tr>
+
+    <!-- Continuations -->
+    <tr>
+      <td class="rowlabel">Continuation 1</td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-2k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-4k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-65k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-1.3b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-8b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 2</td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-2k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-4k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-65k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-1.3b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-8b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 3</td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-2k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-4k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-65k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-1.3b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-8b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 4</td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-2k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-4k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-65k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-1.3b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-8b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <!--
+    <tr>
+      <td class="rowlabel">Continuation 5</td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-2k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-4k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/wavslm-65k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-1.3b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8230-279154-0006/llama-mimi-8b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+    -->
+  </table>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ===== SAMPLE C ===== -->
+  <h4>Sample C</h4>
+
+  <div class="tableScroll">
+  <table class="samples">
+    <tr>
+      <th></th>
+      <th>WavSLM-2k</th>
+      <th>WavSLM-4k</th>
+      <th>WavSLM-65k</th>
+      <th>LLaMA-Mimi 1.3B</th>
+      <th>LLaMA-Mimi 8B</th>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Prompt</td>
+      <td colspan="5" class="promptCell">
+          <audio controls preload="none">
+            <source src="audio/sample_4970-29095-0016/wavslm-2k/prompt_16000.wav" type="audio/wav">
+          </audio>
+        </span>
+      </td>
+    </tr>
+
+    <!-- Continuations -->
+    <tr>
+      <td class="rowlabel">Continuation 1</td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-2k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-4k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-65k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-1.3b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-8b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 2</td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-2k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-4k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-65k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-1.3b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-8b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 3</td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-2k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-4k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-65k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-1.3b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-8b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 4</td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-2k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-4k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-65k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-1.3b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-8b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <!--
+    <tr>
+      <td class="rowlabel">Continuation 5</td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-2k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-4k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/wavslm-65k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-1.3b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_4970-29095-0016/llama-mimi-8b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+    -->
+  </table>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- ===== SAMPLE D ===== -->
+  <h4>Sample D</h4>
+
+  <div class="tableScroll">
+  <table class="samples">
+    <tr>
+      <th></th>
+      <th>WavSLM-2k</th>
+      <th>WavSLM-4k</th>
+      <th>WavSLM-65k</th>
+      <th>LLaMA-Mimi 1.3B</th>
+      <th>LLaMA-Mimi 8B</th>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Prompt</td>
+      <td colspan="5" class="promptCell">
+          <audio controls preload="none">
+            <source src="audio/sample_8224-274381-0008/wavslm-2k/prompt_16000.wav" type="audio/wav">
+          </audio>
+        </span>
+      </td>
+    </tr>
+
+    <!-- Continuations -->
+    <tr>
+      <td class="rowlabel">Continuation 1</td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-2k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-4k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-65k/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-1.3b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-8b/stitched_s00_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 2</td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-2k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-4k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-65k/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-1.3b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-8b/stitched_s01_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 3</td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-2k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-4k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-65k/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-1.3b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-8b/stitched_s02_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <tr>
+      <td class="rowlabel">Continuation 4</td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-2k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-4k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-65k/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-1.3b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-8b/stitched_s03_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+
+    <!--
+    <tr>
+      <td class="rowlabel">Continuation 5</td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-2k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-4k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/wavslm-65k/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-1.3b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+      <td><audio controls preload="none"><source src="audio/sample_8224-274381-0008/llama-mimi-8b/stitched_s04_16000.wav" type="audio/wav"></audio></td>
+    </tr>
+    -->
+  </table>
+  </div>
+
+</div>
+</body>
+</html>
